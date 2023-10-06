@@ -325,7 +325,7 @@ def _calculate_fan_in_and_fan_out(tensor):
 
 
 def xavier_uniform_(
-    tensor: Tensor, gain: float = 1.0, generator: _Optional[torch.Tensor] = None
+    tensor: Tensor, gain: float = 1.0, generator: _Optional[Generator] = None
 ) -> Tensor:
     r"""Fills the input `Tensor` with values according to the method
     described in `Understanding the difficulty of training deep feedforward
