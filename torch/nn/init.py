@@ -1,7 +1,7 @@
 import math
 import warnings
 
-from torch import Generator, Tensor
+from torch import Tensor
 import torch
 from typing import Optional as _Optional
 
@@ -123,7 +123,7 @@ def uniform_(
     tensor: Tensor,
     a: float = 0.0,
     b: float = 1.0,
-    generator: _Optional[Generator] = None,
+    generator: _Optional[torch.Generator] = None,
 ) -> Tensor:
     r"""Fills the input Tensor with values drawn from the uniform
     distribution :math:`\mathcal{U}(a, b)`.
@@ -149,7 +149,7 @@ def normal_(
     tensor: Tensor,
     mean: float = 0.0,
     std: float = 1.0,
-    generator: _Optional[Generator] = None,
+    generator: _Optional[torch.Generator] = None,
 ) -> Tensor:
     r"""Fills the input Tensor with values drawn from the normal
     distribution :math:`\mathcal{N}(\text{mean}, \text{std}^2)`.
@@ -176,7 +176,7 @@ def trunc_normal_(
     std: float = 1.,
     a: float = -2.,
     b: float = 2.,
-    generator: _Optional[Generator] = None
+    generator: _Optional[torch.Generator] = None
 ) -> Tensor:
     r"""Fills the input Tensor with values drawn from a truncated
     normal distribution. The values are effectively drawn from the
@@ -325,7 +325,7 @@ def _calculate_fan_in_and_fan_out(tensor):
 
 
 def xavier_uniform_(
-    tensor: Tensor, gain: float = 1.0, generator: _Optional[Generator] = None
+    tensor: Tensor, gain: float = 1.0, generator: _Optional[torch.Generator] = None
 ) -> Tensor:
     r"""Fills the input `Tensor` with values according to the method
     described in `Understanding the difficulty of training deep feedforward
@@ -357,7 +357,7 @@ def xavier_uniform_(
 def xavier_normal_(
     tensor: Tensor,
     gain: float = 1.0,
-    generator: _Optional[Generator] = None,
+    generator: _Optional[torch.Generator] = None,
 ) -> Tensor:
     r"""Fills the input `Tensor` with values according to the method
     described in `Understanding the difficulty of training deep feedforward
@@ -400,7 +400,7 @@ def kaiming_uniform_(
     a: float = 0,
     mode: str = "fan_in",
     nonlinearity: str = "leaky_relu",
-    generator: _Optional[Generator] = None,
+    generator: _Optional[torch.Generator] = None,
 ):
     r"""Fills the input `Tensor` with values according to the method
     described in `Delving deep into rectifiers: Surpassing human-level
@@ -455,7 +455,7 @@ def kaiming_normal_(
     a: float = 0,
     mode: str = "fan_in",
     nonlinearity: str = "leaky_relu",
-    generator: _Optional[Generator] = None,
+    generator: _Optional[torch.Generator] = None,
 ):
     r"""Fills the input `Tensor` with values according to the method
     described in `Delving deep into rectifiers: Surpassing human-level
@@ -497,7 +497,7 @@ def kaiming_normal_(
 def orthogonal_(
     tensor,
     gain=1,
-    generator: _Optional[Generator] = None,
+    generator: _Optional[torch.Generator] = None,
 ):
     r"""Fills the input `Tensor` with a (semi) orthogonal matrix, as
     described in `Exact solutions to the nonlinear dynamics of learning in deep
@@ -548,7 +548,7 @@ def sparse_(
     tensor,
     sparsity,
     std=0.01,
-    generator: _Optional[Generator] = None,
+    generator: _Optional[torch.Generator] = None,
 ):
     r"""Fills the 2D input `Tensor` as a sparse matrix, where the
     non-zero elements will be drawn from the normal distribution
