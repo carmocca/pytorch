@@ -1282,14 +1282,6 @@ class CompileProfiler:
                 self.op_count += 1
         return gm.forward
 
-    def __enter__(self):
-        self.old_report_guard_failure = config.report_guard_failures
-        config.report_guard_failures = True
-        return self
-
-    def __exit__(self, typ, val, traceback):
-        config.report_guard_failures = self.old_report_guard_failure
-
     def get_metrics(self):
         return {"guard_failures": guard_failures}
 
@@ -2208,10 +2200,7 @@ def get_instruction_source_311(code: types.CodeType, inst: dis.Instruction) -> s
 
 
 def is_guard_failure_reporting_enabled():
-    return (
-        config.report_guard_failures
-        or torch._logging._internal.log_state.is_artifact_enabled("recompiles")
-    )
+    return torch._logging._internal.log_state.is_artifact_enabled("recompiles")
 
 
 def get_static_address_type(t):

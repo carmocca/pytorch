@@ -76,7 +76,6 @@ class ConfigTests(torch._dynamo.test_case.TestCase):
             "repro_tolerance",
             "same_two_models_use_fp64",
             "error_on_recompile",  # safe because: will throw error
-            "report_guard_failures",
             "report_all_guard_failures",
             "base_dir",  # used for minifying / logging
             "translation_validation",

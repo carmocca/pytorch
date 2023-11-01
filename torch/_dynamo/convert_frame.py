@@ -53,7 +53,7 @@ from .exc import (
     unimplemented,
     Unsupported,
 )
-from .guards import CheckFunctionManager, GuardedCode
+from .guards import CheckFunctionManager, GuardedCode, log_recompilation_reason
 from .hooks import Hooks
 from .output_graph import OutputGraph
 from .replay_record import ExecutionRecord
@@ -68,9 +68,7 @@ from .utils import (
     format_bytecode,
     frame_phase_timing,
     gen_record_file_name,
-    guard_failures,
     increment_frame,
-    is_guard_failure_reporting_enabled,
     is_namedtuple,
     istype,
     LazyString,
@@ -83,7 +81,6 @@ from .utils import (
 
 log = logging.getLogger(__name__)
 bytecode_log = torch._logging.getArtifactLogger(__name__, "bytecode")
-recompiles_log = torch._logging.getArtifactLogger(__name__, "recompiles")
 GlobalStateGuard = torch._C._dynamo.guards.GlobalStateGuard
 
 
@@ -269,30 +266,9 @@ def convert_frame_assert(
         code = frame.f_code
 
         cache_size = compute_cache_size(frame, cache_entry)
-        if is_recompilation(cache_size) and (
-            recompiles_log.isEnabledFor(logging.DEBUG) or config.error_on_recompile
-        ):
-            if is_guard_failure_reporting_enabled():
-                failures = str(guard_failures[code][-1])
-                if config.report_all_guard_failures:
-                    failures = failures.strip().split("\n")  # type: ignore[assignment]
-                guard_failure_details = (
-                    f"triggered by the following guard failure(s): {failures}"
-                )
-            else:
-                guard_failure_details = (
-                    "set env var TORCHDYNAMO_REPORT_GUARD_FAILURES=1 to debug further"
-                )
-            message = (
-                f"Recompiling function {code.co_name} in {code.co_filename}:{code.co_firstlineno}",
-                guard_failure_details,
-            )
-
-            if recompiles_log.isEnabledFor(logging.DEBUG):
-                recompiles_log.debug(message, stack_info=True)
-
-            if config.error_on_recompile:
-                raise exc.RecompileError(message)
+        recompile_reasons = None
+        if is_recompilation(cache_size):
+            recompile_reasons = log_recompilation_reason(cache_entry, frame)
 
         input_codes.add(code)
         if code in output_codes:
@@ -347,31 +323,19 @@ def convert_frame_assert(
             def format_guard_failures(code):
                 # For the common case, it's sufficient to see just the most recent failure.
                 # We could add a verbose mode if needed
-                return f"  reasons: {str(guard_failures[code][-1])}\n"
+                assert recompile_reasons, "TODO(whc) any other recompile reasons?"
+                return recompile_reasons[-1]
 
-            if config.report_guard_failures:
-                assert code in guard_failures, "TODO(whc) any other recompile reasons?"
-
-                log.warning(
-                    "torch._dynamo hit config.cache_size_limit (%s)\n"
-                    "   function: %s\n"
-                    "   reasons:  %s\n"
-                    "to diagnose recompilation issues, see %s.",
-                    config.cache_size_limit,
-                    format_func_info(code),
-                    format_guard_failures(code),
-                    troubleshooting_url,
-                )
-            else:
-                log.warning(
-                    "torch._dynamo hit config.cache_size_limit (%s)\n"
-                    "   function: %s\n"
-                    "to diagnose recompilation issues, set env variable TORCHDYNAMO_REPORT_GUARD_FAILURES=1"
-                    " and also see %s.",
-                    config.cache_size_limit,
-                    format_func_info(code),
-                    troubleshooting_url,
-                )
+            log.warning(
+                "torch._dynamo hit config.cache_size_limit (%s)\n"
+                "   function: %s\n"
+                "   reasons:  %s\n"
+                "to diagnose recompilation issues, see %s.",
+                config.cache_size_limit,
+                format_func_info(code),
+                format_guard_failures(code),
+                troubleshooting_url,
+            )
             unimplemented("cache_size_limit reached")
 
         if not has_tensor_in_frame(frame):
