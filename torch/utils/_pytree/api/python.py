@@ -167,12 +167,6 @@ def _register_pytree_node(
     SUPPORTED_SERIALIZED_TYPES[cls] = serialize_node_def
     SERIALIZED_TYPE_TO_PYTHON_TYPE[serialized_type_name] = cls
 
-    import torch
-
-    if torch._running_with_deploy():
-        warnings.warn("C++ pytree utilities do not work with torch::deploy.")
-        return
-
     try:
         from . import cxx
     except ImportError:
