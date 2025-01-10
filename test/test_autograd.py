@@ -76,6 +76,7 @@ from torch.testing._internal.common_utils import (
     skipIfNoLapack,
     skipIfTorchDynamo,
     skipIfWindows,
+    skipPythonCycleCheckIf,
     slowTest,
     TestCase,
     xfailIfS390X,
@@ -4253,6 +4254,7 @@ class TestAutograd(TestCase):
                 x = torch.zeros(1, requires_grad=True)
                 self.assertTrue(not inner_func(x).requires_grad)
 
+    @skipPythonCycleCheckIf(True)
     def test_simple_reentrant(self):
         y_data = torch.randn(2, 2)
 
@@ -4277,6 +4279,7 @@ class TestAutograd(TestCase):
         out.sum().backward()
         self.assertEqual(x.grad, y_data)
 
+    @skipPythonCycleCheckIf(True)
     def test_reentrant_child_error(self):
         # Parent graph.
         a = torch.rand(3, 3, requires_grad=True)
@@ -7021,6 +7024,7 @@ for shape in [(1,), ()]:
         self.assertTrue(mem_reentrant_checkpoint < mem_no_checkpoint)
         self.assertTrue(mem_no_reentrant_checkpoint < mem_no_checkpoint)
 
+    @skipPythonCycleCheckIf(True)
     def test_checkpointing_without_reentrant_custom_function_works(self):
         msg = "Unpack is being triggered for a tensor that was already unpacked once"
 
@@ -7347,6 +7351,7 @@ for shape in [(1,), ()]:
                 out += a
                 out.sum().backward()
 
+    @skipPythonCycleCheckIf(True)
     def test_checkpointing_without_reentrant_saved_object_identity(self):
         x_backward = None
 
@@ -9762,6 +9767,7 @@ for shape in [(1,), ()]:
             self.assertEqual(pack_count, 1)
             self.assertEqual(unpack_count, 1)
 
+    @skipPythonCycleCheckIf(True)
     def test_saved_tensors_hook_version_counter_not_shared(self):
         class Test(torch.autograd.Function):
             @staticmethod
@@ -11842,6 +11848,7 @@ class TestAutogradDeviceType(TestCase):
             self.assertTrue(fwAD.unpack_dual(non_dual).tangent is not tangent)
 
     @onlyCUDA
+    @skipPythonCycleCheckIf
     def test_simple_reentrant_cross_device(self, device):
         class ReentrantFunc(Function):
             _cpu_mode = True
