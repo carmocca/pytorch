@@ -332,7 +332,7 @@ class CUDAConfigHeuristic(BaseConfigHeuristic):
 
 class ROCmConfigHeuristic(BaseConfigHeuristic):
     """
-    Abstract interface for device specific matmul config heuristics
+    ROCm config heuristic subclass for autotune specialisations.
     """
 
     from .utils import get_backend_num_stages
