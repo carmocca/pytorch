@@ -351,8 +351,6 @@ class ROCmConfigHeuristic(BaseConfigHeuristic):
         return [
             {
                 "config": (BLOCK_M, BLOCK_N, BLOCK_K, num_stages, num_warps),
-                "mfma_size": matrix_instr_nonkdim,
-                "kpack": kpack,
                 "cond": True,
             }
             for BLOCK_M, BLOCK_N, BLOCK_K in itertools.product(
@@ -360,8 +358,6 @@ class ROCmConfigHeuristic(BaseConfigHeuristic):
             )
             for num_stages in [2]
             for num_warps in [4, 8]
-            for matrix_instr_nonkdim in [0, 16]
-            for kpack in [1, 2]
         ]
 
     def get_extra_mm_configs(self) -> List[Dict[str, Any]]:
