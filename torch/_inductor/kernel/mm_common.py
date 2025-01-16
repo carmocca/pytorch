@@ -1,7 +1,8 @@
 # mypy: allow-untyped-defs
 import functools
 import logging
-from typing import Any, Dict, Sequence, Tuple
+
+from typing import Any, cast, Dict, Sequence, Tuple
 
 import sympy
 
@@ -30,7 +31,7 @@ def filtered_configs(
     m: int,
     n: int,
     k: int,
-    configs: Sequence[Tuple[int, int, int, int, int]],
+    configs: Sequence[tuple[int, int, int, int, int]],
     has_int8_tensor=False,
     scale=1,
     exclude=lambda m, n, k: False,
@@ -303,7 +304,7 @@ def addmm_epilogue(dtype, alpha, beta):
     return epilogue
 
 
-def _is_static_problem(layout: Layout) -> Tuple[bool, bool]:
+def _is_static_problem(layout: Layout) -> tuple[bool, bool]:
     """
     Check if input tensors and output layout have static shapes and non-zero sizes.
 
