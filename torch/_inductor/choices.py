@@ -5,17 +5,24 @@ from typing import Any, Dict, List, Type, TYPE_CHECKING
 
 import sympy
 
+import torch
+
 from . import config
 from .codecache import write_text
 from .metrics import get_metric_table, is_metric_table_enabled
 from .runtime.hints import DeviceProperties, ReductionHint
 from .scheduler import BaseSchedulerNode, Scheduler, WhyNoFuse
+from .template_heuristics import (
+    BaseConfigHeuristic,
+    CPUConfigHeuristic,
+    CUDAConfigHeuristic,
+    ROCmConfigHeuristic,
+    XPUConfigHeuristic,
+)
 from .virtualized import V
 
 
 if TYPE_CHECKING:
-    import torch
-
     from .codegen.simd_kernel_features import SIMDKernelFeatures
     from .codegen.triton import TritonKernel
 
@@ -39,6 +46,26 @@ class InductorChoices:
 
             torch._inductor.virtualized.V.set_choices_handler(MyHeuristics())
     """
+
+    def __init__(self):
+        self.config_heuristics = self._get_device_config_heuristic()
+
+    def _get_device_config_heuristic(self, device_type="cuda"):
+        from torch._inductor.utils import get_gpu_type
+
+        device_type = get_gpu_type()
+
+        if device_type == "cuda":
+            if torch.version.hip is None:
+                return CUDAConfigHeuristic()
+            else:
+                return ROCmConfigHeuristic()
+        elif device_type == "xpu":
+            return XPUConfigHeuristic()
+        elif torch.cuda.is_available():
+            return BaseConfigHeuristic()
+        else:
+            return CPUConfigHeuristic()
 
     def triton_kernel_kwargs(
         self,
