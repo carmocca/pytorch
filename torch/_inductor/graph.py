@@ -35,7 +35,10 @@ from torch import device, Tensor
 from torch._decomp import get_decompositions
 from torch._dynamo.utils import defake, dynamo_timed
 from torch._logging import LazyString, trace_structured
-from torch._prims_common import make_channels_last_strides_for
+from torch._prims_common import (
+    compute_required_storage_length,
+    make_channels_last_strides_for,
+)
 from torch._subclasses.fake_tensor import FakeTensor
 from torch.fx import GraphModule
 from torch.fx.experimental._backward_state import BackwardState
@@ -63,6 +66,7 @@ from .codegen.common import (
     get_device_op_overrides,
     get_wrapper_codegen_for_device,
     init_backend_registration,
+    WorkspaceArg,
 )
 from .codegen.wrapper import PythonWrapperCodegen
 from .exc import (
@@ -396,6 +400,11 @@ class GraphLowering(torch.fx.Interpreter):
         )
         self.device_type = "cpu"
         self.buffers: List[ir.Buffer] = []
+
+        # Inplace padding may require Inductor to allocate slightly larger
+        # tensor for padding.
+        self.buffer_to_padded_size: Dict[str, List[int]] = {}
+
         self.operations: List[ir.Operation] = []
         self.const_output_index: Dict[str, int] = (
             const_output_index if const_output_index else {}
@@ -498,6 +507,28 @@ class GraphLowering(torch.fx.Interpreter):
         self.placeholder_idx = -1
 
         self.bw_donated_idxs = get_donated_idxs()
+
+    def get_allocation_size(
+        self, node: Union[ir.TensorBox, ir.StorageBox, ir.Buffer, WorkspaceArg]
+    ) -> Sequence[Expr]:
+        if isinstance(node, ir.TensorBox):
+            node = node.data  # type: ignore[assignment]
+        if isinstance(node, ir.StorageBox):
+            node = node.data  # type: ignore[assignment]
+        if (
+            isinstance(node, ir.ComputedBuffer)
+            and node.name in self.buffer_to_padded_size
+        ):
+            return self.buffer_to_padded_size[node.name]
+        else:
+            return node.get_size()
+
+    def get_allocation_storage_size(self, node: Union[ir.Buffer, WorkspaceArg]) -> Expr:
+        layout = node.get_layout()
+        size = self.get_allocation_size(node)  # consider inplace padding
+        stride = layout.stride
+        offset = layout.offset
+        return compute_required_storage_length(size, stride, offset)  # type: ignore[arg-type]
 
     def has_feature(
         self,
