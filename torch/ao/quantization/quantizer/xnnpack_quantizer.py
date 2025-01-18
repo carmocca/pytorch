@@ -30,6 +30,7 @@ from torch.ao.quantization.quantizer.xnnpack_quantizer_utils import (
     propagate_annotation,
     QuantizationConfig,
 )
+from torch.fx._compatibility import compatibility
 
 
 if TYPE_CHECKING:
@@ -234,8 +235,15 @@ def _get_not_module_type_or_name_filter(
 
     return not_module_type_or_name_filter
 
-
+@compatibility(is_backward_compatible=False)
 class XNNPACKQuantizer(Quantizer):
+    """
+    !!! DEPRECATED !!!
+    XNNPACKQuantizer is a marked as deprected. It will be removed in the future.
+    It has been moved to executorch.backends.xnnpack.quantizer.xnnpack_quantizer.XNNPACKQuantizer.
+    Please use the new quantizer instead.
+    """
+
     supported_config_and_operators = _get_supported_config_and_operators()
     STATIC_QAT_ONLY_OPS = [
         "conv_bn_relu",
