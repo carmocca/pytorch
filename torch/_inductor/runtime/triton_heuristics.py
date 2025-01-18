@@ -21,7 +21,7 @@ import torch
 from torch.utils._ordered_set import OrderedSet
 
 from ..triton_bundler import TritonBundler
-from ..utils import prefix_is_reduction
+from ..utils import prefix_is_reduction, triton_version_uses_attrs_dict
 from . import triton_helpers
 from .autotune_cache import AutotuneCache
 from .benchmarking import benchmarker
@@ -499,17 +499,21 @@ class CachingAutotuner(KernelInterface):
         )
         none_args = none_args.difference(OrderedSet(compile_meta["signature"].keys()))
 
-        call_args = [
-            arg
-            for i, arg in enumerate(self.fn.arg_names)
-            if i not in self.fn.constexprs and arg not in none_args
-        ]
+        if triton_version_uses_attrs_dict():
+            call_args = self.fn.arg_names
+            def_args = self.fn.arg_names
+        else:
+            call_args = [
+                arg
+                for i, arg in enumerate(self.fn.arg_names)
+                if i not in self.fn.constexprs and arg not in none_args
+            ]
 
-        def_args = [
-            name
-            for name in self.fn.arg_names
-            if name not in cfg.kwargs and name not in none_args
-        ]
+            def_args = [
+                name
+                for name in self.fn.arg_names
+                if name not in cfg.kwargs and name not in none_args
+            ]
         binary_shared = (
             binary.shared if hasattr(binary, "shared") else binary.metadata.shared
         )
@@ -618,6 +622,27 @@ class CachingAutotuner(KernelInterface):
 
         return binary, launcher
 
+    def _get_args_with_constexprs(self, args, launcher):
+        """
+        `args` is passed in with only the non-constexpr args (because the constexpr arg values
+        depend on the config). However, in later triton versions, the constexpr args need to be
+        added into the args list.
+        """
+        if triton_version_uses_attrs_dict():
+            # first: aggregate the constexpr args in (index, val) pairs
+            # so we can sort them by index.
+            constexpr_args: list[tuple[int, Any]] = []
+            for arg_name, arg_val in launcher.config.kwargs.items():
+                constexpr_args.append((self.fn.arg_names.index(arg_name), arg_val))
+
+            constexpr_args.sort()
+            new_args = [*args]
+            for arg_idx, arg_val in constexpr_args:
+                new_args.insert(arg_idx, arg_val)
+
+            return new_args
+        return args
+
     def bench(self, launcher, *args, grid, with_profiler=False, **kwargs):
         """Measure the performance of a given launcher"""
         # we don't skip configs with spilled registers when auto-tuning custom
@@ -646,8 +671,9 @@ class CachingAutotuner(KernelInterface):
             )
             # reset to zero before evaluating any config
             self.reset_to_zero_args(*args, **kwargs)
+            args_with_constexprs = self._get_args_with_constexprs(cloned_args, launcher)
             launcher(
-                *cloned_args,
+                *args_with_constexprs,
                 **cloned_kwargs,
                 grid=grid,
                 stream=stream,
@@ -927,6 +953,8 @@ class CachingAutotuner(KernelInterface):
         (launcher,) = self.launchers
         if launcher.store_cubin and (not benchmark_run or not self.cuda_kernel_saved):
             self.save_gpu_kernel(grid, stream, launcher)
+
+        args = self._get_args_with_constexprs(args, launcher)
 
         if self.dump_launch_params:
             _dump_launch_params(args, kwargs, launcher, self.fn.__name__)
