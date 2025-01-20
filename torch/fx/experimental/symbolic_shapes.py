@@ -143,6 +143,7 @@ __all__ = [
     "is_symbol_binding_fx_node",
     "is_concrete_bool",
     "is_nested_int",
+    "is_unbacked_symint",
     "SHAPEENV_EVENT_KEY",
     "CURRENT_NODE_KEY",
     "has_free_symbols",
@@ -1251,6 +1252,15 @@ def _constrain_symbol_range(
     shape_env: ShapeEnv, s: sympy.Symbol, compiler_min: int, compiler_max: int
 ) -> None:
     shape_env.constrain_symbol_range(s, compiler_min, compiler_max)
+
+
+def is_unbacked_symint(a: Union[SymInt, int]) -> bool:
+    return (
+        isinstance(a, SymInt)
+        and isinstance(a.node, SymNode)
+        and isinstance(a.node.expr, sympy.Symbol)
+        and a.node.shape_env.is_unbacked_symint(a.node.expr)
+    )
 
 
 def _advise_is_size(a: SymInt) -> None:
