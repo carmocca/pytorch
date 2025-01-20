@@ -1,5 +1,6 @@
 #include <c10/util/CallOnce.h>
 #include <c10/util/Exception.h>
+#include <c10/util/irange.h>
 #include <c10/xpu/XPUFunctions.h>
 
 #include <vector>
@@ -18,6 +19,20 @@ namespace {
  * determined at runtime. There's currently a SYCL device pool that is lazily
  * created and only initialized once, ensuring thread-local safety. Each device
  * within the device pool shares the same default context.
+ *
+ * In certain scenarios, GPU devices may reside on separate SYCL platforms. For
+ * instance, on Windows, an integrated GPU (iGPU) and a discrete GPU (dGPU) may
+ * exist on different platforms. Since sycl::context cannot span across multiple
+ * platforms, creating a single default context that includes both becomes
+ * infeasible.
+ *
+ * To address this limitation, we prioritize the enumeration of dGPU. The device
+ * enumeration logic is as follows:
+ * 1. Identify the first Level Zero (L0) platform that contains at least one
+ *    dGPU and enumerate all dGPUs on that platform.
+ * 2. If no dGPU is found, identify the first L0 platform containing at least
+ *    one iGPU and enumerate all iGPUs on that platform.
+ * 3. If neither dGPUs nor iGPUs are found, conclude that no GPUs are available.
  */
 c10::once_flag init_flag;
 thread_local DeviceIndex curDeviceIndex = 0;
@@ -28,19 +43,60 @@ struct DevicePool {
 } gDevicePool;
 
 void enumDevices(std::vector<std::unique_ptr<sycl::device>>& devices) {
+  // See Note [Device Management] for more details.
   auto platform_list = sycl::platform::get_platforms();
-  // Enumerated GPU devices from the specific platform.
-  for (const auto& platform : platform_list) {
-    if (platform.get_backend() != sycl::backend::ext_oneapi_level_zero) {
-      continue;
+  auto is_igpu = [](const sycl::device& device) {
+    // Generally, iGPUs share a unified memory subsystem with the host.
+    return device.get_info<sycl::info::device::host_unified_memory>();
+  };
+  // Check if a platform contains at least one GPU (either iGPU or dGPU).
+  auto has_gpu = [&is_igpu](sycl::platform& platform, bool check_igpu) {
+    // Only consider platforms using the Level Zero backend.
+    return platform.get_backend() == sycl::backend::ext_oneapi_level_zero &&
+        std::any_of(
+               platform.get_devices().begin(),
+               platform.get_devices().end(),
+               [&is_igpu, check_igpu](const sycl::device& device) {
+                 return device.is_gpu() &&
+                     (check_igpu ? is_igpu(device) : !is_igpu(device));
+               });
+  };
+
+  // Case 1: Platform with dGPU found. Most platforms with dGPU only have dGPU
+  // or a combination of dGPU and iGPU.
+  auto has_dgpu = [&has_gpu](sycl::platform& platform) {
+    return has_gpu(platform, /*check_igpu=*/false);
+  };
+  // Find the first platform that contains at least one dGPU.
+  auto platform_with_dgpu =
+      std::find_if(platform_list.begin(), platform_list.end(), has_dgpu);
+  // Only add all dGPUs to the device list.
+  if (C10_LIKELY(platform_with_dgpu != platform_list.end())) {
+    for (const auto& device : platform_with_dgpu->get_devices()) {
+      if (device.is_gpu() && !is_igpu(device)) {
+        devices.push_back(std::make_unique<sycl::device>(device));
+      }
     }
-    auto device_list = platform.get_devices();
-    for (const auto& device : device_list) {
-      if (device.is_gpu()) {
+    return; // Exit early since we already found a platform with dGPU.
+  }
+
+  // Case 2: No dGPU found, but a platform with iGPU is available.
+  auto has_igpu = [&has_gpu](sycl::platform& platform) {
+    return has_gpu(platform, /*check_igpu=*/true);
+  };
+  // Find the first platform that contains at least one iGPU.
+  auto platform_with_igpu =
+      std::find_if(platform_list.begin(), platform_list.end(), has_igpu);
+  // Add all iGPUs to the device list.
+  if (C10_LIKELY(platform_with_igpu != platform_list.end())) {
+    for (const auto& device : platform_with_igpu->get_devices()) {
+      if (device.is_gpu()) { // If the device is a GPU, it must be a iGPU.
         devices.push_back(std::make_unique<sycl::device>(device));
       }
     }
   }
+
+  // Case 3: No GPUs found (neither dGPU nor iGPU) - Do nothing.
 }
 
 inline void initGlobalDevicePoolState() {
