@@ -3198,21 +3198,30 @@ def native_group_norm(
         input,
         [batch_size, num_groups, num_channels // num_groups, flattened_inner_size],
     )
-    out, mean, rstd = _normalize(input_reshaped, reduction_dims, eps)
-    out = out.view(input.shape)
-
-    broadcast_dims = [0] + list(range(2, input.ndim))
-    unsqueeze_bias = None
-    if bias is not None:
-        unsqueeze_bias = _unsqueeze_multiple(bias, broadcast_dims)
-    unsqueeze_weight = None
+    reduction_dims = utils.canonicalize_dims(input_reshaped.ndim, reduction_dims)
+    computation_dtype = utils.get_computation_dtype(input_reshaped.dtype)
+    input_reshaped = _maybe_convert_to_dtype(input_reshaped, computation_dtype)
+    biased_var, mean = torch.var_mean(
+        input_reshaped, dim=reduction_dims, unbiased=False, keepdim=True
+    )
+    rstd = torch.rsqrt(biased_var + eps)
     if weight is not None:
-        unsqueeze_weight = _unsqueeze_multiple(weight, broadcast_dims)
+        weight_reshaped = torch.reshape(
+            weight, [1, num_groups, num_channels // num_groups, 1]
+        )
+        w = rstd * weight_reshaped
+        b = -mean * w
+    else:
+        w = rstd
+        b = -mean * rstd
+    if bias is not None:
+        bias_reshaped = torch.reshape(
+            bias, [1, num_groups, num_channels // num_groups, 1]
+        )
+        b = b + bias_reshaped
 
-    if unsqueeze_weight is not None:
-        out = out * unsqueeze_weight
-    if unsqueeze_bias is not None:
-        out = out + unsqueeze_bias
+    out = input_reshaped * w + b
+    out = out.view(input.shape)
 
     out = _maybe_convert_to_dtype(out, input.dtype)  # type: ignore[assignment]
     mean = _maybe_convert_to_dtype(mean, input.dtype)  # type: ignore[assignment]
